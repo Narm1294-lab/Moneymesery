@@ -342,41 +342,44 @@ export function AiAssistantSheet({
   };
 
   const startSpeech = () => {
+    // Mobile browsers (iOS Safari, Android Chrome) require HTTPS (secure context) for microphone access
+    const isSecure =
+      typeof window !== "undefined" &&
+      (window.isSecureContext ||
+        window.location.protocol === "https:" ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1");
+
+    if (!isSecure) {
+      setError("Microphone access on mobile requires a secure HTTPS connection. Please use your HTTPS URL or type instead.");
+      return;
+    }
+
     const w = window as Window & {
-      SpeechRecognition?: new () => {
-        lang: string;
-        interimResults: boolean;
-        maxAlternatives: number;
-        onstart: (() => void) | null;
-        onend: (() => void) | null;
-        onerror: (() => void) | null;
-        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-        start: () => void;
-      };
-      webkitSpeechRecognition?: new () => {
-        lang: string;
-        interimResults: boolean;
-        maxAlternatives: number;
-        onstart: (() => void) | null;
-        onend: (() => void) | null;
-        onerror: (() => void) | null;
-        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-        start: () => void;
-      };
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
     };
     const Speech = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!Speech) {
-      setError("Speech input is not available in this browser. Type instead.");
+      setError("Speech input is not supported in this mobile browser. Type instead.");
       return;
     }
+
+    // Cancel any active TTS speech so output audio does not conflict with mic input on mobile
+    ttsCancel();
+    setSpeakingMsgId(null);
+
     const rec = new Speech();
-    rec.lang = speechLocale === 'auto' ? (navigator.language || 'en-US') : speechLocale;
-    rec.interimResults = false;
+    // Normalize language: fallback to en-US if auto/empty
+    const resolvedLang = speechLocale === 'auto' ? (navigator.language || 'en-US') : speechLocale;
+    rec.lang = resolvedLang;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+    rec.continuous = false;
+
+    let capturedText = "";
+
     rec.onstart = () => {
-      ttsCancel();
-      setSpeakingMsgId(null);
-      playListenStart();
       setListening(true);
       setSteps(["Listening…"]);
       setStartedAt(Date.now());
@@ -384,17 +387,55 @@ export function AiAssistantSheet({
       setVoiceReply(true);
       try { localStorage.setItem("mc.voice_reply", "true"); } catch {}
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => {
-      setListening(false);
-      setError("I could not hear that clearly. Type instead.");
+
+    rec.onresult = (e: any) => {
+      let finalStr = "";
+      let interimStr = "";
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) {
+          finalStr += res[0].transcript;
+        } else {
+          interimStr += res[0].transcript;
+        }
+      }
+      const heard = (finalStr || interimStr).trim();
+      if (heard) {
+        capturedText = heard;
+      }
     };
-    rec.onresult = (e) => {
-      const heard = e.results[0][0].transcript;
+
+    rec.onerror = (e: any) => {
       setListening(false);
-      void send(heard);
+      const err = e?.error;
+      if (err === "not-allowed") {
+        setError("Microphone permission was denied. Tap the lock/aA icon in your browser address bar and allow Microphone access.");
+      } else if (err === "no-speech") {
+        setError("No speech was detected. Tap the mic again and speak clearly.");
+      } else if (err === "network") {
+        setError("Network error connecting to speech recognition. Please check your internet connection.");
+      } else if (err === "audio-capture") {
+        setError("Microphone not available or in use by another app.");
+      } else if (err === "service-not-allowed") {
+        setError("Speech recognition service not allowed. On mobile, HTTPS is required.");
+      } else if (err !== "aborted") {
+        setError("Could not hear clearly. Please tap the mic again or type your note.");
+      }
     };
-    rec.start();
+
+    rec.onend = () => {
+      setListening(false);
+      if (capturedText.trim()) {
+        void send(capturedText.trim());
+      }
+    };
+
+    try {
+      rec.start();
+    } catch (err) {
+      setListening(false);
+      setError("Could not start speech recognition. Please type instead.");
+    }
   };
 
   const pickCategory = (msgId: number, categoryId: string) => {

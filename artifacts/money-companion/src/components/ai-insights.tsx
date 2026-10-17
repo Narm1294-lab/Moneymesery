@@ -96,28 +96,57 @@ export function AiInsightsCard({
       setError("Speech input is not available in this browser. Press Generate instead.");
       return;
     }
+    const isSecure = typeof window !== 'undefined' && (window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (!isSecure) {
+      setError("Microphone on mobile requires a secure HTTPS connection. Please use your HTTPS URL or press Generate.");
+      return;
+    }
     const rec = new Speech();
-    rec.lang = "en-NP";
-    rec.interimResults = false;
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+    rec.continuous = false;
+    let heardText = "";
     rec.onstart = () => {
-      playListenStart();
       setListening(true);
       setError("");
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => {
+    rec.onresult = (e: any) => {
+      let finalStr = "";
+      let interimStr = "";
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) finalStr += res[0].transcript;
+        else interimStr += res[0].transcript;
+      }
+      const heard = (finalStr || interimStr).trim();
+      if (heard) heardText = heard;
+    };
+    rec.onerror = (e: any) => {
       playError();
       setListening(false);
-      setError("I could not hear that clearly. Press Generate instead.");
+      const err = e?.error;
+      if (err === "not-allowed") {
+        setError("Microphone permission denied. Allow mic in browser settings.");
+      } else if (err === "no-speech") {
+        setError("No speech detected. Tap mic again and speak clearly.");
+      } else if (err !== "aborted") {
+        setError("Could not hear clearly. Press Generate instead.");
+      }
     };
-    rec.onresult = (e) => {
+    rec.onend = () => {
       setListening(false);
-      const heard = e.results[0][0].transcript;
-      setStage(`Heard: “${heard}”`);
-      void run(true);
+      if (heardText.trim()) {
+        setStage(`Heard: “${heardText.trim()}”`);
+        void run(true);
+      }
     };
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+      setError("Could not start microphone. Press Generate instead.");
+    }
   };
 
   const stageRef = useRef(false);

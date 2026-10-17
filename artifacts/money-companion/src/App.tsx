@@ -537,16 +537,68 @@ function NewTransactionPage() {
     }
     const parsed=parseLocally(sentence,categories); setDraft(d=>({...d,...parsed,source:'text'})); setReview(Boolean(parsed.category_id&&categoriesReady)); };
   const startSpeech = () => {
+    const isSecure = typeof window !== 'undefined' && (window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (!isSecure) { setError('Microphone on mobile requires a secure HTTPS connection. Please use your HTTPS URL or type.'); return; }
     const Speech = (window as Window & { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer }).SpeechRecognition || (window as Window & { webkitSpeechRecognition?: new () => SpeechRecognizer }).webkitSpeechRecognition;
     if (!Speech) { setError('Speech input is not available in this browser. Type your note instead.'); return; }
-    const recognition = new Speech(); recognition.lang = navigator.language || 'en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
-    recognition.onstart=()=>{setListening(true);setError('');}; recognition.onend=()=>setListening(false);
-    recognition.onerror=()=>{setListening(false);setError('We could not hear that clearly. You can type your note instead.');};
-    recognition.onresult=(event)=>{const heard=event.results[0][0].transcript;setTranscript(heard);setSentence(heard);setError('');setAiUsed(false);setLoanDraft(null);
-      void handleLoanNote(heard, 'voice').then(isLoan=>{ if(isLoan) return;
-      const parsed=parseLocally(heard,categories);setDraft(d=>({...d,...parsed,source:'voice'}));setReview(Boolean(parsed.category_id&&categoriesReady));
-      if(aiConfigured){setAiParsing(true);parseTransactionWithAi(aiSettings,heard,categories,'voice',currency).then(ai=>{if(ai){setDraft(d=>({...d,amount:String(ai.amount),type:ai.type,description:ai.description||heard.slice(0,100),merchant:ai.merchant||d.merchant,category_id:ai.category_id||d.category_id,source:'voice'}));setReview(Boolean(ai.category_id&&categoriesReady));setAiUsed(true);}}).catch(()=>{}).finally(()=>setAiParsing(false));}});};
-    recognition.start();
+    const recognition = new Speech();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    let capturedTranscript = '';
+    recognition.onstart = () => { setListening(true); setError(''); };
+    recognition.onerror = (event: any) => {
+      setListening(false);
+      const err = event?.error;
+      if (err === 'not-allowed') {
+        setError('Microphone permission denied. Tap the lock/aA icon in your mobile browser address bar and enable Microphone.');
+      } else if (err === 'no-speech') {
+        setError('No speech was heard. Tap the mic and speak clearly.');
+      } else if (err === 'network') {
+        setError('Network error with mobile speech service. Check your connection or type.');
+      } else if (err !== 'aborted') {
+        setError('We could not hear that clearly. You can type your note instead.');
+      }
+    };
+    recognition.onresult = (event: any) => {
+      let finalStr = '';
+      let interimStr = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) finalStr += res[0].transcript;
+        else interimStr += res[0].transcript;
+      }
+      const heard = (finalStr || interimStr).trim();
+      if (heard) {
+        capturedTranscript = heard;
+        setTranscript(heard);
+        setSentence(heard);
+      }
+    };
+    recognition.onend = () => {
+      setListening(false);
+      const heard = capturedTranscript.trim();
+      if (!heard) return;
+      setError(''); setAiUsed(false); setLoanDraft(null);
+      void handleLoanNote(heard, 'voice').then(isLoan => {
+        if (isLoan) return;
+        const parsed = parseLocally(heard, categories);
+        setDraft(d => ({ ...d, ...parsed, source: 'voice' }));
+        setReview(Boolean(parsed.category_id && categoriesReady));
+        if (aiConfigured) {
+          setAiParsing(true);
+          parseTransactionWithAi(aiSettings, heard, categories, 'voice', currency).then(ai => {
+            if (ai) {
+              setDraft(d => ({ ...d, amount: String(ai.amount), type: ai.type, description: ai.description || heard.slice(0, 100), merchant: ai.merchant || d.merchant, category_id: ai.category_id || d.category_id, source: 'voice' }));
+              setReview(Boolean(ai.category_id && categoriesReady));
+              setAiUsed(true);
+            }
+          }).catch(() => {}).finally(() => setAiParsing(false));
+        }
+      });
+    };
+    try { recognition.start(); } catch { setListening(false); setError('Could not start microphone. Type instead.'); }
   };
   const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); setError(''); if(!categoriesReady)return; if(!draft.amount || Number(draft.amount)<=0){setError('Add an amount greater than zero.');return;} if(!draft.category_id){setError('Choose a category before saving.');return;} setReview(true); };
   const save = () => {
@@ -590,10 +642,15 @@ function ModeButton({ active, icon, label, onClick, testId }: { active: boolean;
 }
 
 interface SpeechRecognizer {
-  lang: string; interimResults: boolean; maxAlternatives: number;
-  onstart: (()=>void)|null; onend: (()=>void)|null; onerror: (()=>void)|null;
-  onresult: ((event: {results: ArrayLike<ArrayLike<{transcript:string}>>})=>void)|null;
-  start: ()=>void;
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  continuous?: boolean;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event?: any) => void) | null;
+  onresult: ((event: any) => void) | null;
+  start: () => void;
 }
 declare global { interface Window { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer } }
 
