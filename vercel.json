@@ -1,0 +1,10 @@
+{
+  "buildCommand": "pnpm --filter @workspace/money-companion run build",
+  "outputDirectory": "artifacts/money-companion/dist/public",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

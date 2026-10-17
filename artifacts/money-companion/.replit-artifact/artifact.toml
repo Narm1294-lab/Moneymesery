@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Money Companion"
+description = "A friendly personal finance app for recording income and expenses quickly, checking money in and out, and gradually adding budgets, savings goals, loans, and grants. Defaults to NPR and Kathmandu time."
+version = "1.0.0"
+id = "artifacts/money-companion"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19509
+
+[services.development]
+run = "pnpm --filter @workspace/money-companion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/money-companion", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/money-companion/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19509"
+BASE_PATH = "/"
