@@ -13,6 +13,7 @@ import {
   type AiSettings,
 } from "@/lib/ai-providers";
 import { maskKey, useAiSettings } from "@/hooks/useAiSettings";
+import { AiCreditQuotaCard } from "@/components/AiCreditQuotaCard";
 
 const PROVIDERS: AiProviderId[] = ["openrouter", "gemini", "custom"];
 
@@ -157,6 +158,12 @@ export function AiSettingsPanel({ compact = false, defaultOpen }: { compact?: bo
       </button>
 
       {open && (<>
+      {configured && (
+        <div className="mt-4">
+          <AiCreditQuotaCard />
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl bg-muted p-1.5" role="tablist" aria-label="AI provider">
         {PROVIDERS.map((p) => (
           <button

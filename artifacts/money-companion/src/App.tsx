@@ -15,6 +15,8 @@ import {
 import { AiSettingsPanel } from '@/components/ai-settings';
 import { AiInsightsCard } from '@/components/ai-insights';
 import { AiAssistantFloating, AiAssistantSheet } from '@/components/ai-assistant';
+import { AiCreditQuotaCard } from '@/components/AiCreditQuotaCard';
+import { LandingPage } from '@/pages/LandingPage';
 import { useAiSettings } from '@/hooks/useAiSettings';
 import { parseTransactionWithAi, parseLoanWithAi, type LoanDraft } from '@/lib/ai-agent';
 import { parseLoanNote, type ParsedLoanNote } from '@/lib/transaction-parser';
@@ -732,10 +734,17 @@ function AuthPage({ signUp = false }: { signUp?: boolean }) {
 }
 
 function PublicHome() {
-  return <div className="min-h-[90dvh]"><header className="flex items-center justify-between py-3"><Brand/><div className="flex items-center gap-2"><Link href="/sign-in" className="rounded-full px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="link-public-signin">Sign in</Link><Link href="/sign-up" className="rounded-full bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground" data-testid="link-public-signup">Get started</Link></div></header><div className="grid items-center gap-12 py-14 md:grid-cols-[1.1fr_.9fr] md:py-24"><div><p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d9c8a9] bg-[#f4eddd] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.16em] text-[#7d694b]"><span className="h-1.5 w-1.5 rounded-full bg-[#67876b]"/>Everyday finances worldwide</p><h1 className="serif max-w-[700px] text-[54px] leading-[.99] tracking-[-.055em] sm:text-[76px]">Money notes,<br/><span className="text-[#9a7455]">made human.</span></h1><p className="mt-6 max-w-[470px] text-base leading-relaxed text-muted-foreground">A calm little place to write down money in and money out. No accounting words, no big setup. Just your own picture, getting clearer over time.</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/sign-up" className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5" data-testid="button-get-started">Start with a note <ArrowRight size={16}/></Link><Link href="/sign-in" className="rounded-full border border-border bg-card px-6 py-3.5 text-sm font-semibold" data-testid="button-public-login">I already have an account</Link></div><p className="mt-4 text-[10px] text-muted-foreground">Private to you. Supports any world currency. Nothing to connect.</p></div><div className="relative mx-auto w-full max-w-[400px]"><div className="absolute -inset-5 rotate-[-4deg] rounded-[36px] border border-[#d7c5a3] bg-[#efe5d0]"/><div className="relative rotate-[2deg] rounded-[28px] border border-[#eee5d7] bg-[#fffaf0] p-6 shadow-[0_28px_70px_-40px_rgba(51,62,49,.42)]"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[.18em] text-[#8d7959]">A note to self</span><span className="rounded-full bg-[#e3ebdd] px-2.5 py-1 text-[9px] font-bold text-[#537453]">TODAY</span></div><p className="serif mt-7 text-[28px] leading-tight">A little more at ease.</p><div className="my-6 h-px bg-[#e7decf]"/><div className="space-y-4"><PreviewLine color="bg-[#dce9d9]" icon={<ArrowDownLeft size={16}/>} title="Pay from the shop" caption="Income · this morning" value="+ $ 1,850"/><PreviewLine color="bg-[#f1e2d4]" icon={<Coffee size={16}/>} title="Tea & a bun" caption="Food · nearby" value="− $ 125"/></div><div className="mt-6 rounded-2xl bg-[#eae9dc] p-4"><p className="text-[10px] text-[#68705f]">Your recorded balance</p><p className="mono mt-1 text-2xl font-medium text-[#29473d]">$ 1,725</p><p className="mt-2 text-[9px] text-[#828371]">A preview, not real transaction data.</p></div></div><div className="absolute -bottom-9 -left-10 hidden h-20 w-20 items-center justify-center rounded-full bg-[#cd8867] text-[#fff5e9] md:flex"><span className="serif -rotate-12 text-center text-[14px] leading-tight">your money<br/>your way</span></div></div></div><div className="grid gap-5 border-t border-border py-8 sm:grid-cols-3"><IntroNote title="Quick to jot down" body="Type a number, say it aloud, or write it in your own words. You always review before saving."/><IntroNote title="No money jargon" body="Record an expense or income in plain language. Choose from your available categories."/><IntroNote title="Only your real notes" body="Your view grows from what you record. No made-up numbers or predictions." /></div></div>;
+  return <LandingPage />;
 }
-function PreviewLine({ color, icon, title, caption, value }: { color: string; icon: ReactNode; title: string; caption: string; value: string }) { return <div className="flex items-center gap-3"><span className={`grid h-10 w-10 place-items-center rounded-[14px] ${color} text-[#4a6951]`}>{icon}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-[#304036]">{title}</p><p className="text-[10px] text-[#8b8b7d]">{caption}</p></div><span className="mono text-[11px] font-medium text-[#455a49]">{value}</span></div>; }
-function IntroNote({ title, body }: { title: string; body: string }) { return <div className="py-1"><p className="serif text-[19px]">{title}</p><p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">{body}</p></div>; }
+function IntroNote({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="py-1">
+      <p className="serif text-[19px]">{title}</p>
+      <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">{body}</p>
+    </div>
+  );
+}
+
 
 function GlobalAssistant() {
   const { user } = useAuthSession();
@@ -757,6 +766,7 @@ function AiPage() {
       <button onClick={()=>setAssistantOpen(true)} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5" data-testid="button-open-assistant-page"><Sparkles size={16}/>Talk to the agent</button>
     </PageHead>
     <GlobalConfigurationSection />
+    <AiCreditQuotaCard />
     <AiSettingsPanel defaultOpen />
     <div className="mt-5 grid gap-3 sm:grid-cols-3">
       <IntroNote title="Smarter drafts" body="On the Add page, the agent reads amounts, shops, and categories — with on-device fallback."/>

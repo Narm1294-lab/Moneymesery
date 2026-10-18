@@ -14,9 +14,17 @@ export interface AiCreditInfo {
   secsUntilDayReset?: number;
   /** Human label for the provider */
   providerLabel?: string;
+  /** Total credits in USD or account balance */
+  creditBalance?: number;
+  /** Total usage in USD */
+  usage?: number;
+  /** Account credit limit if specified */
+  limit?: number | null;
   /** Raw error if fetch failed */
   error?: string;
   loading: boolean;
+  /** Manually trigger a refresh */
+  refetch?: () => void;
 }
 
 /** Seconds until next UTC midnight */
@@ -40,9 +48,8 @@ export function formatCountdown(secs: number): string {
 }
 
 async function fetchOpenRouterInfo(apiKey: string): Promise<Partial<AiCreditInfo>> {
-  const res = await fetch("https://openrouter.ai/api/v1/auth/key", {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+  const headers = { Authorization: `Bearer ${apiKey}` };
+  const res = await fetch("https://openrouter.ai/api/v1/auth/key", { headers });
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw new Error("API key rejected.");
     throw new Error(`OpenRouter returned ${res.status}.`);
@@ -50,14 +57,34 @@ async function fetchOpenRouterInfo(apiKey: string): Promise<Partial<AiCreditInfo
   const json = (await res.json()) as {
     data?: {
       is_free_tier?: boolean;
+      usage?: number;
+      limit?: number | null;
       rate_limit?: { requests?: number; interval?: string };
     };
   };
   const d = json.data ?? {};
   const isFree = !!d.is_free_tier;
+  const usage = typeof d.usage === "number" ? d.usage : undefined;
+  const limit = d.limit ?? null;
+
   // OpenRouter free: 20 req/min, 50 req/day (documented limits)
   const reqLimitMinute = d.rate_limit?.interval === "minute" ? (d.rate_limit.requests ?? 20) : 20;
   const reqLimitDay = isFree ? 50 : 1000;
+
+  // Try fetching credits endpoint (if supported for paid/funded accounts)
+  let creditBalance: number | undefined;
+  try {
+    const credRes = await fetch("https://openrouter.ai/api/v1/credits", { headers });
+    if (credRes.ok) {
+      const credJson = (await credRes.json()) as { data?: { total_credits?: number; total_usage?: number } };
+      if (typeof credJson?.data?.total_credits === "number") {
+        creditBalance = Math.max(0, credJson.data.total_credits - (credJson.data.total_usage ?? 0));
+      }
+    }
+  } catch {
+    // credits endpoint optional
+  }
+
   return {
     isFree,
     reqLimitMinute,
@@ -65,6 +92,9 @@ async function fetchOpenRouterInfo(apiKey: string): Promise<Partial<AiCreditInfo
     secsUntilMinuteReset: 60,
     secsUntilDayReset: secsUntilMidnightUtc(),
     providerLabel: "OpenRouter",
+    usage,
+    limit,
+    creditBalance,
   };
 }
 
@@ -93,6 +123,7 @@ export function useAiCredits(settings: AiSettings | null): AiCreditInfo {
           reqLimitDay: 1500,
           secsUntilDayReset: secsUntilMidnightUtc(),
           secsUntilMinuteReset: 60,
+          creditBalance: 0,
         };
       } else {
         data = { providerLabel: "Custom endpoint", isFree: false };
@@ -117,6 +148,10 @@ export function useAiCredits(settings: AiSettings | null): AiCreditInfo {
     }
   }, []);
 
+  const refetch = useCallback(() => {
+    if (settings) void doFetch(settings);
+  }, [settings, doFetch]);
+
   useEffect(() => {
     if (!settings?.apiKey.trim()) { setInfo({ loading: false }); return; }
     void doFetch(settings);
@@ -125,5 +160,5 @@ export function useAiCredits(settings: AiSettings | null): AiCreditInfo {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.provider, settings?.apiKey]);
 
-  return info;
+  return { ...info, refetch };
 }
