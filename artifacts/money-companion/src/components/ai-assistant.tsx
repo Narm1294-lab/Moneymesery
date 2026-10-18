@@ -387,6 +387,25 @@ export function AiAssistantSheet({
     }
   };
 
+  /** Stop mic and DISCARD the captured text — do not send anything. */
+  const cancelSpeech = () => {
+    playClick();
+    setListening(false);
+    const rec = recognitionRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    capturedTextRef.current = "";
+    setHeardLive("");
+    setSteps([]);
+  };
+
   const startSpeech = () => {
     // Mobile browsers (iOS Safari, Android Chrome) require HTTPS (secure context) for microphone access
     const isSecure =
@@ -1095,18 +1114,28 @@ export function AiAssistantSheet({
             )}
           </div>
           {listening && (
-            <div className="mt-2.5 flex items-center justify-between rounded-xl bg-[#f5e5df] px-3.5 py-1.5 text-[11px] font-medium text-[#914e40]">
-              <span className="flex items-center gap-1.5 truncate">
+            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-[#f5e5df] px-3.5 py-1.5 text-[11px] font-medium text-[#914e40]">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
                 <AudioLines size={13} className="shrink-0 animate-pulse text-[#b76654]" />
-                {heardLive ? `Live: “${heardLive}”` : "Listening… Speak, then tap the red square to send."}
+                {heardLive ? `Live: "${heardLive}"` : "Listening… Speak, then tap the red square to send."}
               </span>
-              <button
-                type="button"
-                onClick={stopSpeech}
-                className="ml-2 shrink-0 rounded-md bg-[#b76654] px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-[#a05545]"
-              >
-                Done &amp; Send
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={cancelSpeech}
+                  title="Stop mic and discard — nothing will be sent"
+                  className="rounded-md border border-[#b76654] px-2 py-0.5 text-[10px] font-bold text-[#b76654] transition hover:bg-[#f0cdc5] active:scale-95"
+                >
+                  Don't Send
+                </button>
+                <button
+                  type="button"
+                  onClick={stopSpeech}
+                  className="rounded-md bg-[#b76654] px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-[#a05545] active:scale-95"
+                >
+                  Done &amp; Send
+                </button>
+              </div>
             </div>
           )}
           <p className="mt-2 text-center text-[10px] text-muted-foreground">
