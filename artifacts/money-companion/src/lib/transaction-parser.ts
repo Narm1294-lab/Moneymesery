@@ -29,9 +29,35 @@ const interestWords = /\b(interest|interests|interés|intereses|byaj|ब्य�
 const repayInWords = /\b(paid\s*back|pay\s*back|repaid|repay|returned|return|got\s*back|received\s*back|devolvió|devolver|फिर्ता|वापस)\b/i;
 const newLoanWords = /\b(lent|lend|borrowed|borrow|presté|pedí|took\b.{0,12}\bloan|gave\b.{0,20}\bloan|loan\s*(given|taken|gareko|diyeko))\b/i;
 
-/** Devanagari digits → ASCII so amounts like २४० parse. */
-function normalizeDigits(text: string): string {
-  return text.replace(/[०-९]/g, (d) => String("०१२३४५६७८९".indexOf(d)));
+/** Devanagari digits & common spoken number words → ASCII numbers so amounts like 500, five hundred, or २४० parse reliably. */
+export function normalizeDigits(text: string): string {
+  let res = text.replace(/[०-९]/g, (d) => String("०१२३४५६७८९".indexOf(d)));
+  const wordCombos: [RegExp, string][] = [
+    [/\b(one\s+thousand|a\s+thousand|one\s+k|1\s*k)\b/gi, "1000"],
+    [/\b(two\s+thousand|2\s*k)\b/gi, "2000"],
+    [/\b(three\s+thousand|3\s*k)\b/gi, "3000"],
+    [/\b(four\s+thousand|4\s*k)\b/gi, "4000"],
+    [/\b(five\s+thousand|5\s*k)\b/gi, "5000"],
+    [/\b(ten\s+thousand|10\s*k)\b/gi, "10000"],
+    [/\b(one\s+hundred|a\s+hundred)\b/gi, "100"],
+    [/\b(two\s+hundred)\b/gi, "200"],
+    [/\b(three\s+hundred)\b/gi, "300"],
+    [/\b(four\s+hundred)\b/gi, "400"],
+    [/\b(five\s+hundred)\b/gi, "500"],
+    [/\b(six\s+hundred)\b/gi, "600"],
+    [/\b(seven\s+hundred)\b/gi, "700"],
+    [/\b(eight\s+hundred)\b/gi, "800"],
+    [/\b(nine\s+hundred)\b/gi, "900"],
+    [/\b(twenty\s+five)\b/gi, "25"],
+    [/\b(fifty)\b/gi, "50"],
+    [/\b(paanch\s+saya|panch\s+sau|पाँच\s*सय|पांच\s*सौ)\b/gi, "500"],
+    [/\b(ek\s+hajar|ek\s+hazar|एक\s*हजार)\b/gi, "1000"],
+    [/\b(dui\s+hajar|do\s+hazar|दुई\s*हजार|दो\s*हजार)\b/gi, "2000"],
+  ];
+  for (const [pattern, repl] of wordCombos) {
+    res = res.replace(pattern, repl);
+  }
+  return res;
 }
 
 export type LoanNoteKind = "loan_new" | "loan_repayment" | "loan_interest";
@@ -171,7 +197,7 @@ export function parseTransactionText(
   categories: CategoryRow[],
   source: "text" | "voice" = "text",
 ): ParsedTransactionDraft | null {
-  const cleanText = text.trim();
+  const cleanText = normalizeDigits(text.trim());
   if (!cleanText || /\b(borrow|borrowed|loan|lend|lent|owe|owed)\b/i.test(cleanText)) {
     return null;
   }

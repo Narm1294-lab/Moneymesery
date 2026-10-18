@@ -421,24 +421,28 @@ export function AiAssistantSheet({
     }
 
     const rec = new Speech();
-    // Normalize language: iOS Safari does not support ne-NP in Siri dictation.
-    // Map Nepali to hi-IN (same Devanagari script supported by Apple) or navigator.language
-    const normalizeRecognitionLang = (lang: string) => {
-      if (!lang || lang === "auto") return navigator.language || "en-US";
-      if (lang === "ne" || lang === "ne-NP") return "hi-IN";
-      return lang;
+    // Resolve recognition language: default to device language (en-US, etc.) for pristine numbers & phrasing
+    const resolveSpeechLang = (targetLocale: string) => {
+      let l = targetLocale === "auto" || !targetLocale ? (navigator.language || "en-US") : targetLocale;
+      if (l === "ne" || l === "ne-NP") {
+        const isApple = typeof navigator !== "undefined" && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+        if (isApple) {
+          l = navigator.language && !navigator.language.startsWith("ne") ? navigator.language : "en-US";
+        }
+      }
+      return l || "en-US";
     };
-    rec.lang = normalizeRecognitionLang(speechLocale);
+    rec.lang = resolveSpeechLang(speechLocale);
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = true;
+    rec.continuous = false;
 
     capturedTextRef.current = "";
     setHeardLive("");
 
     rec.onstart = () => {
       setListening(true);
-      setSteps(["Listening… Tap the red button when finished."]);
+      setSteps(["Listening… Speak your note, tap red button or pause to send."]);
       setStartedAt(Date.now());
       setError("");
       setVoiceReply(true);
@@ -446,17 +450,17 @@ export function AiAssistantSheet({
     };
 
     rec.onresult = (e: any) => {
-      let finalStr = "";
-      let interimStr = "";
+      let combined = "";
       for (let i = 0; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) {
-          finalStr += res[0].transcript;
-        } else {
-          interimStr += res[0].transcript;
+        const chunk = e.results[i][0]?.transcript || "";
+        if (chunk) {
+          if (combined && !combined.endsWith(" ") && !chunk.startsWith(" ")) {
+            combined += " ";
+          }
+          combined += chunk;
         }
       }
-      const heard = (finalStr || interimStr).trim();
+      const heard = combined.trim();
       if (heard) {
         capturedTextRef.current = heard;
         setHeardLive(heard);

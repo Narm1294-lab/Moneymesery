@@ -602,10 +602,11 @@ function NewTransactionPage() {
     speechRef.current = recognition;
     speechTextRef.current = '';
     const userLang = navigator.language || 'en-US';
-    recognition.lang = userLang.startsWith('ne') ? 'hi-IN' : userLang;
+    const isApple = typeof navigator !== 'undefined' && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    recognition.lang = (isApple && userLang.startsWith('ne')) ? 'en-US' : userLang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.onstart = () => { setListening(true); setError(''); };
     recognition.onerror = (event: any) => {
       setListening(false);
@@ -628,14 +629,17 @@ function NewTransactionPage() {
       }
     };
     recognition.onresult = (event: any) => {
-      let finalStr = '';
-      let interimStr = '';
+      let combined = '';
       for (let i = 0; i < event.results.length; i++) {
-        const res = event.results[i];
-        if (res.isFinal) finalStr += res[0].transcript;
-        else interimStr += res[0].transcript;
+        const chunk = event.results[i][0]?.transcript || '';
+        if (chunk) {
+          if (combined && !combined.endsWith(' ') && !chunk.startsWith(' ')) {
+            combined += ' ';
+          }
+          combined += chunk;
+        }
       }
-      const heard = (finalStr || interimStr).trim();
+      const heard = combined.trim();
       if (heard) {
         speechTextRef.current = heard;
         setTranscript(heard);

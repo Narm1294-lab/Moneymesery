@@ -133,24 +133,28 @@ export function AiInsightsCard({
     recRef.current = rec;
     heardTextRef.current = "";
     const userLang = navigator.language || "en-US";
-    rec.lang = userLang.startsWith("ne") ? "hi-IN" : userLang;
+    const isApple = typeof navigator !== "undefined" && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    rec.lang = (isApple && userLang.startsWith("ne")) ? "en-US" : userLang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = true;
+    rec.continuous = false;
 
     rec.onstart = () => {
       setListening(true);
       setError("");
     };
     rec.onresult = (e: any) => {
-      let finalStr = "";
-      let interimStr = "";
+      let combined = "";
       for (let i = 0; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) finalStr += res[0].transcript;
-        else interimStr += res[0].transcript;
+        const chunk = e.results[i][0]?.transcript || "";
+        if (chunk) {
+          if (combined && !combined.endsWith(" ") && !chunk.startsWith(" ")) {
+            combined += " ";
+          }
+          combined += chunk;
+        }
       }
-      const heard = (finalStr || interimStr).trim();
+      const heard = combined.trim();
       if (heard) heardTextRef.current = heard;
     };
     rec.onerror = (e: any) => {
