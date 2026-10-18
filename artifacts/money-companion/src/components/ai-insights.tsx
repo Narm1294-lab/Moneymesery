@@ -102,7 +102,8 @@ export function AiInsightsCard({
       return;
     }
     const rec = new Speech();
-    rec.lang = navigator.language || "en-US";
+    const userLang = navigator.language || "en-US";
+    rec.lang = userLang.startsWith("ne") ? "hi-IN" : userLang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.continuous = false;
@@ -130,6 +131,8 @@ export function AiInsightsCard({
         setError("Microphone permission denied. Allow mic in browser settings.");
       } else if (err === "no-speech") {
         setError("No speech detected. Tap mic again and speak clearly.");
+      } else if (err === "service-not-allowed") {
+        setError("Dictation is disabled on your device. On iPhone: Go to Settings → General → Keyboard → Turn ON 'Enable Dictation'.");
       } else if (err !== "aborted") {
         setError("Could not hear clearly. Press Generate instead.");
       }

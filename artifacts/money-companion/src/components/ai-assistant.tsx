@@ -370,9 +370,14 @@ export function AiAssistantSheet({
     setSpeakingMsgId(null);
 
     const rec = new Speech();
-    // Normalize language: fallback to en-US if auto/empty
-    const resolvedLang = speechLocale === 'auto' ? (navigator.language || 'en-US') : speechLocale;
-    rec.lang = resolvedLang;
+    // Normalize language: iOS Safari does not support ne-NP in Siri dictation.
+    // Map Nepali to hi-IN (same Devanagari script supported by Apple) or navigator.language
+    const normalizeRecognitionLang = (lang: string) => {
+      if (!lang || lang === "auto") return navigator.language || "en-US";
+      if (lang === "ne" || lang === "ne-NP") return "hi-IN";
+      return lang;
+    };
+    rec.lang = normalizeRecognitionLang(speechLocale);
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.continuous = false;
@@ -417,7 +422,7 @@ export function AiAssistantSheet({
       } else if (err === "audio-capture") {
         setError("Microphone not available or in use by another app.");
       } else if (err === "service-not-allowed") {
-        setError("Speech recognition service not allowed. On mobile, HTTPS is required.");
+        setError("Dictation is disabled on your device. On iPhone: Go to Settings → General → Keyboard → Turn ON 'Enable Dictation'.");
       } else if (err !== "aborted") {
         setError("Could not hear clearly. Please tap the mic again or type your note.");
       }

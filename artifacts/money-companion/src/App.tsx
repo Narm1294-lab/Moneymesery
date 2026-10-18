@@ -542,7 +542,8 @@ function NewTransactionPage() {
     const Speech = (window as Window & { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer }).SpeechRecognition || (window as Window & { webkitSpeechRecognition?: new () => SpeechRecognizer }).webkitSpeechRecognition;
     if (!Speech) { setError('Speech input is not available in this browser. Type your note instead.'); return; }
     const recognition = new Speech();
-    recognition.lang = navigator.language || 'en-US';
+    const userLang = navigator.language || 'en-US';
+    recognition.lang = userLang.startsWith('ne') ? 'hi-IN' : userLang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
@@ -557,6 +558,8 @@ function NewTransactionPage() {
         setError('No speech was heard. Tap the mic and speak clearly.');
       } else if (err === 'network') {
         setError('Network error with mobile speech service. Check your connection or type.');
+      } else if (err === 'service-not-allowed') {
+        setError("Dictation is disabled on your device. On iPhone: Go to Settings → General → Keyboard → Turn ON 'Enable Dictation'.");
       } else if (err !== 'aborted') {
         setError('We could not hear that clearly. You can type your note instead.');
       }
