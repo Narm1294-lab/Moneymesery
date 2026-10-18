@@ -20,6 +20,7 @@ import { runChatAgent, matchCategoryName, stripCodeBlocks, type AgentDraft, type
 import { playClick, playError, playListenStart, playPop, playReceive, playSend, playSuccess, playThinkingTick } from "@/lib/sounds";
 import { AgentActivity, QuickPrompts, SoundToggle, TypingDots } from "@/components/agent-activity";
 import { useAiSettings } from "@/hooks/useAiSettings";
+import { useAiCredits, formatCountdown } from "@/hooks/useAiCredits";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useCreateTransaction, useLoans, useSaveIdea } from "@/hooks/useFinance";
 import { ttsSpeak, ttsCancel, LANG_TO_LOCALE } from "@/lib/tts";
@@ -89,6 +90,7 @@ export function AiAssistantSheet({
   onClose: () => void;
 }) {
   const { settings, configured } = useAiSettings();
+  const credits = useAiCredits(configured ? settings : null);
   const { currency, symbol, formatMoney: fmt, aiLanguage } = useCurrency();
   const create = useCreateTransaction();
   const loansQuery = useLoans();
@@ -677,6 +679,47 @@ export function AiAssistantSheet({
             </button>
           </div>
         </div>
+        {/* ── Credit / Quota info bar ─────────────────────── */}
+        {configured && !credits.loading && !credits.error && credits.reqLimitDay && (
+          <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-5 py-1.5 text-[10.5px] text-muted-foreground">
+            <span className="shrink-0 font-semibold text-foreground/70">{credits.providerLabel}</span>
+            <span className="mx-1 text-border">·</span>
+            <span>
+              <span className="font-semibold text-foreground/80">{credits.reqLimitDay}</span> req/day
+            </span>
+            <span className="mx-0.5 text-border">·</span>
+            <span>
+              <span className="font-semibold text-foreground/80">{credits.reqLimitMinute}</span> req/min
+            </span>
+            {credits.secsUntilMinuteReset !== undefined && (
+              <>
+                <span className="mx-0.5 text-border">·</span>
+                <span title="Seconds until your per-minute request limit resets">
+                  ⏱ min resets in{" "}
+                  <span className={`font-semibold ${credits.secsUntilMinuteReset <= 10 ? "text-amber-500" : "text-foreground/80"}`}>
+                    {formatCountdown(credits.secsUntilMinuteReset)}
+                  </span>
+                </span>
+              </>
+            )}
+            {credits.secsUntilDayReset !== undefined && (
+              <>
+                <span className="mx-0.5 text-border">·</span>
+                <span title="Seconds until your daily request limit resets at midnight UTC">
+                  📅 day resets in{" "}
+                  <span className="font-semibold text-foreground/80">
+                    {formatCountdown(credits.secsUntilDayReset)}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+        )}
+        {credits.error && configured && (
+          <div className="border-b border-border bg-amber-50 px-5 py-1.5 text-[10.5px] text-amber-700">
+            Could not load quota info: {credits.error}
+          </div>
+        )}
         {showHowItWorks && (
           <div className="border-b border-border bg-muted/50 px-5 py-3 text-[12px] leading-relaxed text-muted-foreground" data-testid="how-it-works">
             <p className="font-bold text-foreground">How the agent works — tap any step below for details.</p>

@@ -5,6 +5,7 @@ import { generateInsights } from "@/lib/ai-agent";
 import { playClick, playError, playListenStart, playReceive, playSend, playSuccess } from "@/lib/sounds";
 import { AgentActivity, SoundToggle, ThinkingBars } from "@/components/agent-activity";
 import { useAiSettings } from "@/hooks/useAiSettings";
+import { useAiCredits, formatCountdown } from "@/hooks/useAiCredits";
 import type { CategoryRow, DashboardSummary, TransactionRow } from "@/lib/database.types";
 
 export function AiInsightsCard({
@@ -17,6 +18,7 @@ export function AiInsightsCard({
   categories: CategoryRow[];
 }) {
   const { settings, configured } = useAiSettings();
+  const credits = useAiCredits(configured ? settings : null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -282,6 +284,36 @@ export function AiInsightsCard({
               ? "Uses your connected free key, in this browser only. Numbers come only from your notes."
               : "Connect a free OpenRouter or Gemini key to let the agent read your notes and summarise them."}
           </p>
+          {/* Credit / quota info */}
+          {configured && !credits.loading && credits.reqLimitDay && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10.5px] text-muted-foreground">
+              <span className="font-semibold text-foreground/70">{credits.providerLabel}</span>
+              <span>
+                <span className="font-semibold text-foreground/80">{credits.reqLimitDay}</span> req/day
+                <span className="mx-1.5 text-border">·</span>
+                <span className="font-semibold text-foreground/80">{credits.reqLimitMinute}</span> req/min
+              </span>
+              {credits.secsUntilMinuteReset !== undefined && (
+                <span title="Time until per-minute limit resets">
+                  ⏱ min in{" "}
+                  <span className={`font-semibold ${credits.secsUntilMinuteReset <= 10 ? "text-amber-500" : "text-foreground/80"}`}>
+                    {formatCountdown(credits.secsUntilMinuteReset)}
+                  </span>
+                </span>
+              )}
+              {credits.secsUntilDayReset !== undefined && (
+                <span title="Time until daily limit resets at midnight UTC">
+                  📅 day in{" "}
+                  <span className="font-semibold text-foreground/80">
+                    {formatCountdown(credits.secsUntilDayReset)}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+          {credits.error && configured && (
+            <p className="mt-1 text-[10.5px] text-amber-600">Quota unavailable: {credits.error}</p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
