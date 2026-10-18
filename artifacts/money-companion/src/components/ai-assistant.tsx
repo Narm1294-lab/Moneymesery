@@ -421,16 +421,18 @@ export function AiAssistantSheet({
     }
 
     const rec = new Speech();
-    // Resolve recognition language: default to device language (en-US, etc.) for pristine numbers & phrasing
-    const resolveSpeechLang = (targetLocale: string) => {
-      let l = targetLocale === "auto" || !targetLocale ? (navigator.language || "en-US") : targetLocale;
-      if (l === "ne" || l === "ne-NP") {
-        const isApple = typeof navigator !== "undefined" && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
-        if (isApple) {
-          l = navigator.language && !navigator.language.startsWith("ne") ? navigator.language : "en-US";
-        }
+    // Resolve recognition language.
+    // IMPORTANT: ne-NP (Nepali) is NOT supported by any major browser STT engine.
+    // hi-IN uses the same Devanagari script and is universally supported — numbers,
+    // Devanagari words, and mixed Nepali speech all work far better through hi-IN.
+    // The AI still responds in Nepali; only the microphone lang changes.
+    const resolveSpeechLang = (targetLocale: string): string => {
+      if (!targetLocale || targetLocale === "auto") {
+        return navigator.language || "en-US";
       }
-      return l || "en-US";
+      // Nepali → Hindi (same script, far better STT support on all browsers/OS)
+      if (targetLocale === "ne-NP" || targetLocale === "ne") return "hi-IN";
+      return targetLocale;
     };
     rec.lang = resolveSpeechLang(speechLocale);
     rec.interimResults = true;

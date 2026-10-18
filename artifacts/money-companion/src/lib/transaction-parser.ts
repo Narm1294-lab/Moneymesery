@@ -31,28 +31,59 @@ const newLoanWords = /\b(lent|lend|borrowed|borrow|presté|pedí|took\b.{0,12}\b
 
 /** Devanagari digits & common spoken number words → ASCII numbers so amounts like 500, five hundred, or २४० parse reliably. */
 export function normalizeDigits(text: string): string {
+  // Step 1: Devanagari digit characters → ASCII
   let res = text.replace(/[०-९]/g, (d) => String("०१२३४५६७८९".indexOf(d)));
+
+  // Step 2: Spoken Nepali / Hindi single digits
+  const digits: [RegExp, string][] = [
+    [/\bsunna\b/gi, "0"],
+    [/\bek\b/gi, "1"],      [/\bone\b/gi, "1"],    [/\bएक\b/g, "1"],
+    [/\bdui\b/gi, "2"],     [/\bdui\b/gi, "2"],    [/\bdo\b/gi, "2"],    [/\btwo\b/gi, "2"],    [/\bदुई\b/g, "2"],  [/\bदो\b/g, "2"],
+    [/\bteen\b/gi, "3"],   [/\btin\b/gi, "3"],    [/\bthree\b/gi, "3"], [/\bतीन\b/g, "3"],
+    [/\bchaar\b/gi, "4"],  [/\bchar\b/gi, "4"],   [/\bfour\b/gi, "4"],  [/\bचार\b/g, "4"],
+    [/\bpaanch\b/gi, "5"],[/\bpanch\b/gi, "5"],  [/\bfive\b/gi, "5"],  [/\bपाँच\b/g, "5"], [/\bपांच\b/g, "5"],
+    [/\bchha\b/gi, "6"],   [/\bchhe\b/gi, "6"],   [/\bsix\b/gi, "6"],   [/\bछ\b/g, "6"],
+    [/\bsaat\b/gi, "7"],   [/\bsatt\b/gi, "7"],   [/\bseven\b/gi, "7"], [/\bसात\b/g, "7"],
+    [/\baath\b/gi, "8"],   [/\baat\b/gi, "8"],    [/\beight\b/gi, "8"], [/\bआठ\b/g, "8"],
+    [/\bnau\b/gi, "9"],    [/\bnine\b/gi, "9"],   [/\bनौ\b/g, "9"],
+    [/\bdas\b/gi, "10"],   [/\bten\b/gi, "10"],   [/\bदस\b/g, "10"],
+    [/\bgyarah\b/gi, "11"],[/\beleven\b/gi, "11"],
+    [/\bbarah\b/gi, "12"],[/\btwelve\b/gi, "12"],
+    [/\bterah\b/gi, "13"],[/\bthirteen\b/gi, "13"],
+    [/\bchaudah\b/gi, "14"],[/\bfourteen\b/gi, "14"],
+    [/\bpandrah\b/gi, "15"],[/\bfifteen\b/gi, "15"],
+    [/\bsolah\b/gi, "16"], [/\bsixteen\b/gi, "16"],
+    [/\bsatrah\b/gi, "17"],[/\bseventeen\b/gi, "17"],
+    [/\batharah\b/gi, "18"],[/\beighteen\b/gi, "18"],
+    [/\bunneeth\b/gi, "19"],[/\bnineteen\b/gi, "19"],
+    [/\bbees\b/gi, "20"],  [/\bkori\b/gi, "20"],  [/\btwenty\b/gi, "20"],  [/\bबीस\b/g, "20"],
+    [/\bteees\b/gi, "30"], [/\btees\b/gi, "30"],  [/\bthirty\b/gi, "30"],  [/\bतीस\b/g, "30"],
+    [/\bchaalis\b/gi, "40"],[/\bforty\b/gi, "40"],  [/\bचालीस\b/g, "40"],
+    [/\bpachaas\b/gi, "50"],[/\bfifty\b/gi, "50"],  [/\bपचास\b/g, "50"],
+    [/\baatthis\b/gi, "48"],[/\bsaath\b/gi, "60"],  [/\bsixty\b/gi, "60"],   [/\bसाठ\b/g, "60"],
+    [/\bsattar\b/gi, "70"],[/\bseventy\b/gi, "70"], [/\bसत्तर\b/g, "70"],
+    [/\bassee\b/gi, "80"], [/\beighty\b/gi, "80"],  [/\bअस्सी\b/g, "80"],
+    [/\bnabbe\b/gi, "90"], [/\bninety\b/gi, "90"],  [/\bनब्बे\b/g, "90"],
+  ];
+  for (const [pat, val] of digits) {
+    res = res.replace(pat, val);
+  }
+
+  // Step 3: Compound hundreds & thousands (e.g. "ek hajar paanch saya" → "1500")
+  // lakh/लाख
+  res = res.replace(/(\d+)\s*(?:lakh|lakhs?|लाख)/gi, (_, n) => String(Number(n) * 100000));
+  // hajar/thousand
+  res = res.replace(/(\d+)\s*(?:hajar|hazar|hazaar|thousand|हजार)/gi, (_, n) => String(Number(n) * 1000));
+  // saya/saya/hundred
+  res = res.replace(/(\d+)\s*(?:saya|sau|sya|hundred|सय|सौ)/gi, (_, n) => String(Number(n) * 100));
+
+  // Step 4: English compound word combos still needed for edge cases
   const wordCombos: [RegExp, string][] = [
-    [/\b(one\s+thousand|a\s+thousand|one\s+k|1\s*k)\b/gi, "1000"],
-    [/\b(two\s+thousand|2\s*k)\b/gi, "2000"],
-    [/\b(three\s+thousand|3\s*k)\b/gi, "3000"],
-    [/\b(four\s+thousand|4\s*k)\b/gi, "4000"],
-    [/\b(five\s+thousand|5\s*k)\b/gi, "5000"],
-    [/\b(ten\s+thousand|10\s*k)\b/gi, "10000"],
-    [/\b(one\s+hundred|a\s+hundred)\b/gi, "100"],
-    [/\b(two\s+hundred)\b/gi, "200"],
-    [/\b(three\s+hundred)\b/gi, "300"],
-    [/\b(four\s+hundred)\b/gi, "400"],
-    [/\b(five\s+hundred)\b/gi, "500"],
-    [/\b(six\s+hundred)\b/gi, "600"],
-    [/\b(seven\s+hundred)\b/gi, "700"],
-    [/\b(eight\s+hundred)\b/gi, "800"],
-    [/\b(nine\s+hundred)\b/gi, "900"],
-    [/\b(twenty\s+five)\b/gi, "25"],
-    [/\b(fifty)\b/gi, "50"],
-    [/\b(paanch\s+saya|panch\s+sau|पाँच\s*सय|पांच\s*सौ)\b/gi, "500"],
-    [/\b(ek\s+hajar|ek\s+hazar|एक\s*हजार)\b/gi, "1000"],
-    [/\b(dui\s+hajar|do\s+hazar|दुई\s*हजार|दो\s*हजार)\b/gi, "2000"],
+    [/\b(twenty[- ]five)\b/gi, "25"],
+    [/\b(twenty[- ]one)\b/gi, "21"],
+    [/\b(ten\s*k|10\s*k)\b/gi, "10000"],
+    [/\b(five\s*k|5\s*k)\b/gi, "5000"],
+    [/\b(one\s*k|1\s*k|a\s*k)\b/gi, "1000"],
   ];
   for (const [pattern, repl] of wordCombos) {
     res = res.replace(pattern, repl);

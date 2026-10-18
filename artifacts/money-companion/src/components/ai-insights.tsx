@@ -133,8 +133,10 @@ export function AiInsightsCard({
     recRef.current = rec;
     heardTextRef.current = "";
     const userLang = navigator.language || "en-US";
-    const isApple = typeof navigator !== "undefined" && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
-    rec.lang = (isApple && userLang.startsWith("ne")) ? "en-US" : userLang;
+    // ne-NP is unsupported by all browser STT engines. hi-IN uses the same
+    // Devanagari script and has universal browser support for numbers & words.
+    const sttLang = (userLang.startsWith("ne")) ? "hi-IN" : userLang;
+    rec.lang = sttLang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.continuous = false;
