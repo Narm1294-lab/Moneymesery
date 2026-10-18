@@ -68,28 +68,51 @@ export function AiInsightsCard({
     }
   };
 
+  const recRef = useRef<any>(null);
+  const heardTextRef = useRef<string>("");
+
+  const finalizeListening = () => {
+    setListening(false);
+    const rec = recRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+      } catch {}
+      recRef.current = null;
+    }
+    const heard = heardTextRef.current.trim();
+    heardTextRef.current = "";
+    if (heard) {
+      setStage(`Heard: “${heard}”`);
+      void run(true);
+    }
+  };
+
+  const stopListening = () => {
+    playClick();
+    setListening(false);
+    const rec = recRef.current;
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {
+        finalizeListening();
+        return;
+      }
+      setTimeout(() => {
+        finalizeListening();
+      }, 250);
+    } else {
+      finalizeListening();
+    }
+  };
+
   const startListening = () => {
     const w = window as Window & {
-      SpeechRecognition?: new () => {
-        lang: string;
-        interimResults: boolean;
-        maxAlternatives: number;
-        onstart: (() => void) | null;
-        onend: (() => void) | null;
-        onerror: (() => void) | null;
-        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-        start: () => void;
-      };
-      webkitSpeechRecognition?: new () => {
-        lang: string;
-        interimResults: boolean;
-        maxAlternatives: number;
-        onstart: (() => void) | null;
-        onend: (() => void) | null;
-        onerror: (() => void) | null;
-        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-        start: () => void;
-      };
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
     };
     const Speech = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!Speech) {
@@ -101,13 +124,20 @@ export function AiInsightsCard({
       setError("Microphone on mobile requires a secure HTTPS connection. Please use your HTTPS URL or press Generate.");
       return;
     }
+
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch {}
+    }
+
     const rec = new Speech();
+    recRef.current = rec;
+    heardTextRef.current = "";
     const userLang = navigator.language || "en-US";
     rec.lang = userLang.startsWith("ne") ? "hi-IN" : userLang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
-    let heardText = "";
+    rec.continuous = true;
+
     rec.onstart = () => {
       setListening(true);
       setError("");
@@ -121,15 +151,20 @@ export function AiInsightsCard({
         else interimStr += res[0].transcript;
       }
       const heard = (finalStr || interimStr).trim();
-      if (heard) heardText = heard;
+      if (heard) heardTextRef.current = heard;
     };
     rec.onerror = (e: any) => {
       playError();
       setListening(false);
+      recRef.current = null;
       const err = e?.error;
       if (err === "not-allowed") {
         setError("Microphone permission denied. Allow mic in browser settings.");
       } else if (err === "no-speech") {
+        if (heardTextRef.current.trim()) {
+          finalizeListening();
+          return;
+        }
         setError("No speech detected. Tap mic again and speak clearly.");
       } else if (err === "service-not-allowed") {
         setError("Dictation is disabled on your device. On iPhone: Go to Settings → General → Keyboard → Turn ON 'Enable Dictation'.");
@@ -138,17 +173,23 @@ export function AiInsightsCard({
       }
     };
     rec.onend = () => {
-      setListening(false);
-      if (heardText.trim()) {
-        setStage(`Heard: “${heardText.trim()}”`);
-        void run(true);
-      }
+      finalizeListening();
     };
     try {
       rec.start();
     } catch {
       setListening(false);
+      recRef.current = null;
       setError("Could not start microphone. Press Generate instead.");
+    }
+  };
+
+  const toggleListening = () => {
+    if (listening) {
+      stopListening();
+    } else {
+      playClick();
+      startListening();
     }
   };
 
@@ -274,17 +315,14 @@ export function AiInsightsCard({
                 {busy ? <ThinkingBars /> : <Sparkles size={14} />} {text ? "Refresh insights" : "Generate insights"}
               </button>
               <button
-                onClick={() => {
-                  playClick();
-                  startListening();
-                }}
-                disabled={listening || busy}
-                title={listening ? "Listening… speak now (details: transcribed on-device, then insights generate)" : "Ask by voice — click for details: mic transcribes, then insights generate automatically"}
-                aria-label="Ask for insights by voice"
-                className={`grid h-10 w-10 place-items-center rounded-full transition active:scale-90 disabled:opacity-60 ${listening ? "animate-pulse bg-[#b76654] text-white" : "border border-border text-muted-foreground hover:text-foreground"}`}
+                onClick={toggleListening}
+                disabled={busy}
+                title={listening ? "Listening… click again to finish and generate insights" : "Ask by voice — click to start, click again to finish"}
+                aria-label={listening ? "Stop listening and generate insights" : "Ask for insights by voice"}
+                className={`grid h-10 w-10 place-items-center rounded-full transition active:scale-90 ${listening ? "animate-pulse bg-[#b76654] text-white ring-4 ring-[#b76654]/30" : "border border-border text-muted-foreground hover:text-foreground"}`}
                 data-testid="button-insights-mic"
               >
-                {listening ? <AudioLines size={17} /> : <Mic size={17} />}
+                {listening ? <Square size={16} className="fill-current text-white" /> : <Mic size={17} />}
               </button>
               {speaking ? (
                 <button

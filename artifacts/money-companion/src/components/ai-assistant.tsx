@@ -11,6 +11,7 @@ import {
   Pencil,
   Send,
   Sparkles,
+  Square,
   Volume2,
   VolumeX,
   X,
@@ -141,10 +142,18 @@ export function AiAssistantSheet({
   const busyRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const thinkSoundRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const capturedTextRef = useRef("");
+  const [heardLive, setHeardLive] = useState("");
 
   useEffect(() => {
     return () => {
       ttsCancel();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
     };
   }, []);
 
@@ -341,6 +350,43 @@ export function AiAssistantSheet({
     }
   };
 
+  const finalizeSpeech = () => {
+    setListening(false);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+      } catch {}
+      recognitionRef.current = null;
+    }
+    setHeardLive("");
+    const text = capturedTextRef.current.trim();
+    capturedTextRef.current = "";
+    if (text) {
+      void send(text);
+    }
+  };
+
+  const stopSpeech = () => {
+    playClick();
+    setListening(false);
+    const rec = recognitionRef.current;
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {
+        finalizeSpeech();
+        return;
+      }
+      setTimeout(() => {
+        finalizeSpeech();
+      }, 250);
+    } else {
+      finalizeSpeech();
+    }
+  };
+
   const startSpeech = () => {
     // Mobile browsers (iOS Safari, Android Chrome) require HTTPS (secure context) for microphone access
     const isSecure =
@@ -368,6 +414,11 @@ export function AiAssistantSheet({
     // Cancel any active TTS speech so output audio does not conflict with mic input on mobile
     ttsCancel();
     setSpeakingMsgId(null);
+    playClick();
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
 
     const rec = new Speech();
     // Normalize language: iOS Safari does not support ne-NP in Siri dictation.
@@ -380,13 +431,14 @@ export function AiAssistantSheet({
     rec.lang = normalizeRecognitionLang(speechLocale);
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    rec.continuous = true;
 
-    let capturedText = "";
+    capturedTextRef.current = "";
+    setHeardLive("");
 
     rec.onstart = () => {
       setListening(true);
-      setSteps(["Listening…"]);
+      setSteps(["Listening… Tap the red button when finished."]);
       setStartedAt(Date.now());
       setError("");
       setVoiceReply(true);
@@ -406,16 +458,22 @@ export function AiAssistantSheet({
       }
       const heard = (finalStr || interimStr).trim();
       if (heard) {
-        capturedText = heard;
+        capturedTextRef.current = heard;
+        setHeardLive(heard);
       }
     };
 
     rec.onerror = (e: any) => {
       setListening(false);
+      recognitionRef.current = null;
       const err = e?.error;
       if (err === "not-allowed") {
         setError("Microphone permission was denied. Tap the lock/aA icon in your browser address bar and allow Microphone access.");
       } else if (err === "no-speech") {
+        if (capturedTextRef.current.trim()) {
+          finalizeSpeech();
+          return;
+        }
         setError("No speech was detected. Tap the mic again and speak clearly.");
       } else if (err === "network") {
         setError("Network error connecting to speech recognition. Please check your internet connection.");
@@ -429,17 +487,24 @@ export function AiAssistantSheet({
     };
 
     rec.onend = () => {
-      setListening(false);
-      if (capturedText.trim()) {
-        void send(capturedText.trim());
-      }
+      finalizeSpeech();
     };
 
+    recognitionRef.current = rec;
     try {
       rec.start();
-    } catch (err) {
+    } catch {
       setListening(false);
+      recognitionRef.current = null;
       setError("Could not start speech recognition. Please type instead.");
+    }
+  };
+
+  const toggleSpeech = () => {
+    if (listening) {
+      stopSpeech();
+    } else {
+      startSpeech();
     }
   };
 
@@ -979,14 +1044,14 @@ export function AiAssistantSheet({
           )}
           <div className="flex items-center gap-2.5">
             <button
-              onClick={startSpeech}
-              disabled={busy || listening}
-              aria-label="Speak to the agent"
-              title={listening ? "Listening… speak now (details: your voice is transcribed on-device, then sent as text)" : "Speak to the agent — click for details: mic transcribes your voice, then the agent thinks aloud"}
-              className={`grid h-13 w-13 shrink-0 place-items-center rounded-full p-3.5 transition active:scale-90 ${listening ? "animate-pulse bg-[#b76654] text-white" : "bg-muted text-foreground hover:bg-muted/70"}`}
+              onClick={toggleSpeech}
+              disabled={busy}
+              aria-label={listening ? "Stop listening and send" : "Speak to the agent"}
+              title={listening ? "Listening… Click again to finish & send" : "Speak to the agent — click to start, click again to finish & send"}
+              className={`grid h-13 w-13 shrink-0 place-items-center rounded-full p-3.5 transition active:scale-90 ${listening ? "animate-pulse bg-[#b76654] text-white ring-4 ring-[#b76654]/30" : "bg-muted text-foreground hover:bg-muted/70"}`}
               data-testid="button-assistant-mic"
             >
-              {listening ? <AudioLines size={20} /> : <Mic size={20} />}
+              {listening ? <Square size={18} className="fill-current text-white" /> : <Mic size={20} />}
             </button>
             <input
               value={input}
@@ -997,7 +1062,11 @@ export function AiAssistantSheet({
                   void send();
                 }
               }}
-              placeholder={listening ? "Listening…" : `Type or speak: ${symbol}240 lunch, या खाना में ${symbol}500…`}
+              placeholder={
+                listening
+                  ? heardLive ? `Heard: “${heardLive}” (tap red square to send)` : "Listening… speak now, tap red square to send"
+                  : `Type or speak: ${symbol}240 lunch, या खाना में ${symbol}500…`
+              }
               className="field field-lg"
               aria-label="Message the agent"
               data-testid="input-assistant"
@@ -1019,6 +1088,21 @@ export function AiAssistantSheet({
               </button>
             )}
           </div>
+          {listening && (
+            <div className="mt-2.5 flex items-center justify-between rounded-xl bg-[#f5e5df] px-3.5 py-1.5 text-[11px] font-medium text-[#914e40]">
+              <span className="flex items-center gap-1.5 truncate">
+                <AudioLines size={13} className="shrink-0 animate-pulse text-[#b76654]" />
+                {heardLive ? `Live: “${heardLive}”` : "Listening… Speak, then tap the red square to send."}
+              </span>
+              <button
+                type="button"
+                onClick={stopSpeech}
+                className="ml-2 shrink-0 rounded-md bg-[#b76654] px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-[#a05545]"
+              >
+                Done &amp; Send
+              </button>
+            </div>
+          )}
           <p className="mt-2 text-center text-[10px] text-muted-foreground">
             The agent only sends data to your chosen provider when you press send. Review every draft before saving.
           </p>

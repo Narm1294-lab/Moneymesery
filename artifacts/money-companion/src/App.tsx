@@ -7,7 +7,7 @@ import NotFound from '@/pages/not-found';
 import {
   ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check,
   CircleHelp, Clock3, Coffee, FileText, HandCoins, Home, Lightbulb, LoaderCircle, LogOut, Mic, Plus, Search,
-  Sparkles, Trash2, Volume2, VolumeX, Wallet, X,
+  Sparkles, Square, Trash2, Volume2, VolumeX, Wallet, X,
 } from 'lucide-react';
 import {
   Route, Switch, useLocation, Router as WouterRouter, Link,
@@ -536,25 +536,88 @@ function NewTransactionPage() {
       finally { setAiParsing(false); }
     }
     const parsed=parseLocally(sentence,categories); setDraft(d=>({...d,...parsed,source:'text'})); setReview(Boolean(parsed.category_id&&categoriesReady)); };
+  const speechRef = useRef<SpeechRecognizer | null>(null);
+  const speechTextRef = useRef<string>('');
+
+  const finalizeSpeech = () => {
+    setListening(false);
+    const rec = speechRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+      } catch {}
+      speechRef.current = null;
+    }
+    const heard = speechTextRef.current.trim();
+    speechTextRef.current = '';
+    if (!heard) return;
+    setError(''); setAiUsed(false); setLoanDraft(null);
+    void handleLoanNote(heard, 'voice').then(isLoan => {
+      if (isLoan) return;
+      const parsed = parseLocally(heard, categories);
+      setDraft(d => ({ ...d, ...parsed, source: 'voice' }));
+      setReview(Boolean(parsed.category_id && categoriesReady));
+      if (aiConfigured) {
+        setAiParsing(true);
+        parseTransactionWithAi(aiSettings, heard, categories, 'voice', currency).then(ai => {
+          if (ai) {
+            setDraft(d => ({ ...d, amount: String(ai.amount), type: ai.type, description: ai.description || heard.slice(0, 100), merchant: ai.merchant || d.merchant, category_id: ai.category_id || d.category_id, source: 'voice' }));
+            setReview(Boolean(ai.category_id && categoriesReady));
+            setAiUsed(true);
+          }
+        }).catch(() => {}).finally(() => setAiParsing(false));
+      }
+    });
+  };
+
+  const stopSpeech = () => {
+    setListening(false);
+    const rec = speechRef.current;
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {
+        finalizeSpeech();
+        return;
+      }
+      setTimeout(() => {
+        finalizeSpeech();
+      }, 250);
+    } else {
+      finalizeSpeech();
+    }
+  };
+
   const startSpeech = () => {
     const isSecure = typeof window !== 'undefined' && (window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     if (!isSecure) { setError('Microphone on mobile requires a secure HTTPS connection. Please use your HTTPS URL or type.'); return; }
     const Speech = (window as Window & { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer }).SpeechRecognition || (window as Window & { webkitSpeechRecognition?: new () => SpeechRecognizer }).webkitSpeechRecognition;
     if (!Speech) { setError('Speech input is not available in this browser. Type your note instead.'); return; }
+    if (speechRef.current) {
+      try { speechRef.current.stop(); } catch {}
+    }
     const recognition = new Speech();
+    speechRef.current = recognition;
+    speechTextRef.current = '';
     const userLang = navigator.language || 'en-US';
     recognition.lang = userLang.startsWith('ne') ? 'hi-IN' : userLang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-    let capturedTranscript = '';
+    recognition.continuous = true;
     recognition.onstart = () => { setListening(true); setError(''); };
     recognition.onerror = (event: any) => {
       setListening(false);
+      speechRef.current = null;
       const err = event?.error;
       if (err === 'not-allowed') {
         setError('Microphone permission denied. Tap the lock/aA icon in your mobile browser address bar and enable Microphone.');
       } else if (err === 'no-speech') {
+        if (speechTextRef.current.trim()) {
+          finalizeSpeech();
+          return;
+        }
         setError('No speech was heard. Tap the mic and speak clearly.');
       } else if (err === 'network') {
         setError('Network error with mobile speech service. Check your connection or type.');
@@ -574,34 +637,23 @@ function NewTransactionPage() {
       }
       const heard = (finalStr || interimStr).trim();
       if (heard) {
-        capturedTranscript = heard;
+        speechTextRef.current = heard;
         setTranscript(heard);
         setSentence(heard);
       }
     };
     recognition.onend = () => {
-      setListening(false);
-      const heard = capturedTranscript.trim();
-      if (!heard) return;
-      setError(''); setAiUsed(false); setLoanDraft(null);
-      void handleLoanNote(heard, 'voice').then(isLoan => {
-        if (isLoan) return;
-        const parsed = parseLocally(heard, categories);
-        setDraft(d => ({ ...d, ...parsed, source: 'voice' }));
-        setReview(Boolean(parsed.category_id && categoriesReady));
-        if (aiConfigured) {
-          setAiParsing(true);
-          parseTransactionWithAi(aiSettings, heard, categories, 'voice', currency).then(ai => {
-            if (ai) {
-              setDraft(d => ({ ...d, amount: String(ai.amount), type: ai.type, description: ai.description || heard.slice(0, 100), merchant: ai.merchant || d.merchant, category_id: ai.category_id || d.category_id, source: 'voice' }));
-              setReview(Boolean(ai.category_id && categoriesReady));
-              setAiUsed(true);
-            }
-          }).catch(() => {}).finally(() => setAiParsing(false));
-        }
-      });
+      finalizeSpeech();
     };
-    try { recognition.start(); } catch { setListening(false); setError('Could not start microphone. Type instead.'); }
+    try { recognition.start(); } catch { setListening(false); speechRef.current = null; setError('Could not start microphone. Type instead.'); }
+  };
+
+  const toggleSpeech = () => {
+    if (listening) {
+      stopSpeech();
+    } else {
+      startSpeech();
+    }
   };
   const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); setError(''); if(!categoriesReady)return; if(!draft.amount || Number(draft.amount)<=0){setError('Add an amount greater than zero.');return;} if(!draft.category_id){setError('Choose a category before saving.');return;} setReview(true); };
   const save = () => {
@@ -623,7 +675,7 @@ function NewTransactionPage() {
     )}
     <section className="rounded-[26px] border border-border bg-card p-5 soft-shadow sm:p-7">
       {mode==='text' && <div className="mb-6 rounded-[18px] bg-[#eee8d9] p-4"><div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#44594b]"><Sparkles size={14}/>Describe it simply {aiUsed && <span className="rounded-full bg-[#4b684d] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white" data-testid="badge-ai-draft">AI draft</span>}</div><div className="flex flex-col gap-2 sm:flex-row"><input value={sentence} onChange={e=>setSentence(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void parseText();}}} placeholder={`${symbol}25 for lunch`} className="field border-transparent bg-card" data-testid="input-natural-note"/><button onClick={()=>void parseText()} disabled={aiParsing} className="rounded-xl bg-[#29473d] px-5 py-3 text-sm font-semibold text-[#f7f1e6] disabled:opacity-60" data-testid="button-parse-text">{aiParsing?'Reading…':aiConfigured?'Make a draft (AI)':'Make a draft'}</button></div><p className="mt-2 text-[10px] leading-relaxed text-[#6e786c]">{aiConfigured?'Your connected free key reads this in your browser — nothing is saved until you confirm. Falls back to on-device reading if AI fails.':'This is a simple on-device reading of your words, not AI. Connect a free key on the AI & Agent page for smarter drafts.'} Check every detail before saving.</p></div>}
-      {mode==='voice' && <div className="mb-6 rounded-[18px] bg-[#eee8d9] p-4"><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2 text-xs font-bold text-[#44594b]"><AudioLines size={15}/>Speak a quick note</div><p className="mt-1 text-[10px] text-[#6e786c]">Your browser turns speech into text. Nothing is saved until you confirm.</p></div><button onClick={startSpeech} disabled={listening} className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${listening?'animate-pulse bg-[#b76654] text-white':'bg-[#29473d] text-[#f7f1e6]'}`} aria-label="Start speech transcription" data-testid="button-start-speech">{listening?<AudioLines size={20}/>:<Mic size={19}/>}</button></div>{transcript&&<p className="mt-3 rounded-xl bg-card px-3 py-2 text-sm text-foreground" data-testid="text-transcript">“{transcript}”</p>}</div>}
+      {mode==='voice' && <div className="mb-6 rounded-[18px] bg-[#eee8d9] p-4 transition-all"><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2 text-xs font-bold text-[#44594b]"><AudioLines size={15}/>{listening ? 'Listening… Tap red square when done' : 'Speak a quick note'}</div><p className="mt-1 text-[10px] text-[#6e786c]">{listening ? 'Speak clearly. When finished, tap the red square button to create draft.' : 'Tap mic to start speaking, then tap again when finished. Nothing is saved until you confirm.'}</p></div><button onClick={toggleSpeech} className={`grid h-12 w-12 shrink-0 place-items-center rounded-full transition active:scale-90 ${listening?'animate-pulse bg-[#b76654] text-white ring-4 ring-[#b76654]/30':'bg-[#29473d] text-[#f7f1e6] hover:bg-[#32584c]'}`} aria-label={listening ? 'Stop recording and create draft' : 'Start speech transcription'} title={listening ? 'Click to stop listening and create draft' : 'Click to start speaking — click again when done'} data-testid="button-start-speech">{listening?<Square size={18} className="fill-current text-white"/>:<Mic size={19}/>}</button></div>{transcript&&<div className="mt-3 flex items-start gap-2 rounded-xl bg-card px-3.5 py-2 text-sm text-foreground"><span className="shrink-0 text-xs font-semibold text-primary">{listening ? 'Live:' : 'Transcribed:'}</span><p className="italic" data-testid="text-transcript">“{transcript}”</p></div>}{listening && <div className="mt-2.5 flex justify-end"><button type="button" onClick={stopSpeech} className="rounded-lg bg-[#b76654] px-3 py-1 text-xs font-bold text-white shadow-xs transition hover:bg-[#a05545]">Done &amp; create draft</button></div>}</div>}
       {error && <div role="alert" className="mb-4 rounded-xl bg-[#f5e5df] px-4 py-3 text-sm text-[#914e40]" data-testid="status-entry-error">{error}</div>}
       {categoriesQuery.isError && <div role="alert" className="mb-4 rounded-xl bg-[#f5e5df] px-4 py-3 text-sm text-[#914e40]" data-testid="status-categories-error">{categoryLoadError(categoriesQuery.error)}</div>}
       {!categoriesQuery.isLoading && !categoriesQuery.isError && available.length === 0 && <div role="status" className="mb-4 rounded-xl bg-[#f5e5df] px-4 py-3 text-sm text-[#914e40]" data-testid="status-categories-empty">No {draft.type} categories are available. Run lib/db/supabase-core-schema.sql in the Supabase project connected to this app, then refresh.</div>}
